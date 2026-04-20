@@ -18,7 +18,9 @@ class Cerebro {
       this.model = model;
     } else {
       this.model = tf.sequential();
-      this.model.add(tf.layers.dense({ units: 5, inputShape: [9], activation: 'tanh' }));
+      // Input layer: 11 inputs (9 sensors + speed + angular velocity)
+      this.model.add(tf.layers.dense({ units: 18, inputShape: [11], activation: 'relu' }));
+      this.model.add(tf.layers.dense({ units: 10, activation: 'relu' }));
       this.model.add(tf.layers.dense({ units: 2, activation: 'tanh' }));
     }
   }
@@ -32,7 +34,7 @@ class Cerebro {
    */
   pensar(readings) {
     return tf.tidy(() => {
-      const input  = tf.tensor2d([readings]);
+      const input = tf.tensor2d([readings]);
       const output = this.model.predict(input);
       return output.dataSync();
     });
@@ -49,7 +51,7 @@ class Cerebro {
     this.model.layers.forEach(layer => {
       newModel.add(tf.layers.dense(layer.getConfig()));
     });
-    const weights    = this.model.getWeights();
+    const weights = this.model.getWeights();
     const newWeights = weights.map(w => w.clone());
     newModel.setWeights(newWeights);
     return new Cerebro(newModel);
@@ -61,7 +63,7 @@ class Cerebro {
    */
   mutar(rate) {
     tf.tidy(() => {
-      const weights    = this.model.getWeights();
+      const weights = this.model.getWeights();
       const newWeights = weights.map(tensor => {
         const vals = tensor.dataSync().slice();
         for (let i = 0; i < vals.length; i++) {
@@ -72,6 +74,36 @@ class Cerebro {
         return tf.tensor(vals, tensor.shape);
       });
       this.model.setWeights(newWeights);
+    });
+  }
+
+  /**
+   * Crossover: create a new brain by mixing weights from this one and another.
+   * Simple arithmetic mean of weights (effectively "averaging" their traits).
+   * @param {Cerebro} outro
+   * @returns {Cerebro}
+   */
+  cruzar(outro) {
+    return tf.tidy(() => {
+      const w1 = this.model.getWeights();
+      const w2 = outro.model.getWeights();
+      const newWeights = w1.map((tensor, i) => {
+        const v1 = tensor.dataSync();
+        const v2 = w2[i].dataSync();
+        const combined = new Float32Array(v1.length);
+        for (let j = 0; j < v1.length; j++) {
+          // 50% chance to take from either parent (uniform crossover)
+          combined[j] = Math.random() < 0.5 ? v1[j] : v2[j];
+        }
+        return tf.tensor(combined, tensor.shape);
+      });
+
+      const novoModelo = tf.sequential();
+      this.model.layers.forEach(layer => {
+        novoModelo.add(tf.layers.dense(layer.getConfig()));
+      });
+      novoModelo.setWeights(newWeights);
+      return new Cerebro(novoModelo);
     });
   }
 

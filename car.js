@@ -65,10 +65,21 @@ class Car {
     this.readings = this.sensors.map(offset => this._sensorReading(offset));
 
     // Neural network decision
-    const inputs = this.readings.map(v => map(v, 0, 200, 1, 0)); // 1 = clear, 0 = wall
+    // Inputs: 9 sensors + current linear speed + current angular velocity (rotation delta)
+    const normalizedSpeed = map(this.vel.mag(), 0, 5, 0, 1);
+    const normalizedRot = map(rot || 0, -1, 1, 0, 1); // use previous rotation as state
+
+    // We'll store the last rotation output to feed it back as state
+    this.lastRot = this.lastRot || 0;
+
+    const sensorInputs = this.readings.map(v => map(v, 0, 200, 1, 0));
+    const inputs = [...sensorInputs, normalizedSpeed, map(this.lastRot, -1, 1, 0, 1)];
+
     const [rot, throttle] = this.brain.pensar(inputs);
-    this.angle += rot * 0.1;
-    this.vel.add(p5.Vector.fromAngle(this.angle).mult(throttle * 0.3));
+    this.lastRot = rot; // store for next frame
+
+    this.angle += rot * 0.12; // slightly more responsive steering
+    this.vel.add(p5.Vector.fromAngle(this.angle).mult(throttle * 0.35)); // slightly more acceleration
 
     // Apply friction & move
     this.vel.mult(0.95);
@@ -117,21 +128,25 @@ class Car {
     // ── Collision detection ──────────────────────────────────────────────
     if (this._hasCollided()) {
       this.collisions++;
-      this.score -= 40 * this.collisions;
-      if (this.collisions > 2) this.alive = false;
+      this.score -= 100; // heavier penalty
+      if (this.collisions >= 1) this.alive = false; // stricter: 1 collision and you're out
     }
   }
 
   // ── Fitness ─────────────────────────────────────────────────────────────
   calcularFitness() {
     let fitness = this.score;
-    if (!this.alive && !this.finished) fitness *= 0.7;
+    if (!this.alive && !this.finished) fitness *= 0.5; // heavier penalty for dying
 
     const avgSpeed = this.accumulatedSpeed / Math.max(1, this.framesAlive);
-    fitness += this.framesAlive * 0.1 + avgSpeed * 50;
+    fitness += (this.framesAlive * 0.05) + (avgSpeed * 60);
 
-    // Reward proximity to finish line
-    fitness += Math.max(0, (1000 - this.bestDist) * 0.2);
+    // Reward progress more aggressively
+    const progress = Math.max(0, (1200 - this.bestDist));
+    fitness += progress * 0.5;
+
+    // Smoother driving bonus (less idle frames, more consistent movement)
+    if (this.finished) fitness += 1000;
 
     return Math.max(0, fitness);
   }

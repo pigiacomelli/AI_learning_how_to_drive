@@ -10,10 +10,10 @@
  */
 
 // ── Evolution parameters ───────────────────────────────────────────────────
-const POPULATION_SIZE = 30;   // cars per generation
-const MUTATION_RATE = 0.06; // probability a weight is mutated per step
-const MAX_FRAMES = 3000; // frame budget per generation (~50 s @ 60 fps)
-const ELITE_COUNT = 3;    // top brains kept across generations
+const POPULATION_SIZE = 50;   // increased for more diversity
+const MUTATION_RATE = 0.08; // slightly higher initial mutation
+const MAX_FRAMES = 3500; // slightly longer
+const ELITE_COUNT = 5;    // keep top 5
 
 // ── Simulation state ───────────────────────────────────────────────────────
 let population = [];   // current generation of Car objects
@@ -135,22 +135,49 @@ function detectSpawnAndFinish() {
 function newGeneration() {
   frameCount_ = 0;
   transitioning = false;
-  population = [];
 
-  for (let i = 0; i < POPULATION_SIZE; i++) {
-    let brain;
-    if (eliteBrains.length > 0) {
-      const parent = eliteBrains[i % eliteBrains.length];
-      brain = parent.copiaCerebro();
-      brain.mutar(MUTATION_RATE);
-    } else {
-      // Try loading a saved brain for generation 1
-      const saved = Cerebro.carregarDeLocalStorage();
-      brain = saved ? saved : new Cerebro();
-      if (saved && i > 0) { brain.mutar(MUTATION_RATE); }
-    }
-    population.push(new Car(spawnPoint.x, spawnPoint.y, brain));
+  const saved = (generation === 1) ? Cerebro.carregarDeLocalStorage() : null;
+  const newPopulation = [];
+
+  // 1. Keep elites directly (Elitism)
+  for (let i = 0; i < eliteBrains.length; i++) {
+    const car = new Car(spawnPoint.x, spawnPoint.y, eliteBrains[i].copiaCerebro());
+    newPopulation.push(car);
   }
+
+  // 2. Fill the rest with offspring
+  while (newPopulation.length < POPULATION_SIZE) {
+    let childBrain;
+    if (eliteBrains.length >= 2) {
+      // Tournament Selection
+      const parentA = selecionarParente(eliteBrains);
+      const parentB = selecionarParente(eliteBrains);
+
+      // Crossover + Mutation
+      childBrain = parentA.cruzar(parentB);
+      childBrain.mutar(MUTATION_RATE);
+    } else if (saved) {
+      childBrain = saved.copiaCerebro();
+      if (newPopulation.length > 0) childBrain.mutar(MUTATION_RATE);
+    } else {
+      childBrain = new Cerebro();
+    }
+
+    newPopulation.push(new Car(spawnPoint.x, spawnPoint.y, childBrain));
+  }
+
+  population = newPopulation;
+}
+
+/**
+ * Tournament Selection: pick 3 random brains from the elite pool and return the best one.
+ * (Since eliteBrains is already sorted, we just pick the one with lowest index).
+ */
+function selecionarParente(pool) {
+  const i1 = floor(random(pool.length));
+  const i2 = floor(random(pool.length));
+  const i3 = floor(random(pool.length));
+  return pool[min(i1, i2, i3)];
 }
 
 function nextGeneration() {
@@ -158,7 +185,10 @@ function nextGeneration() {
 
   // Evaluate fitness and sort descending
   population.sort((a, b) => b.calcularFitness() - a.calcularFitness());
-  eliteBrains = population.slice(0, ELITE_COUNT).map(c => c.brain.copiaCerebro());
+
+  // Update elite pool (we take more candidates for selection)
+  const poolSize = max(ELITE_COUNT, 10);
+  eliteBrains = population.slice(0, poolSize).map(c => c.brain.copiaCerebro());
 
   // Count finishers this generation
   totalFinished += population.filter(c => c.finished).length;
