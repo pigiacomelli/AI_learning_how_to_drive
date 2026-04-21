@@ -133,6 +133,7 @@ function detectSpawnAndFinish() {
 
 // ── Generation management ──────────────────────────────────────────────────
 function newGeneration() {
+  console.log(`🚀 Starting Generation ${generation}...`);
   frameCount_ = 0;
   transitioning = false;
 
@@ -144,29 +145,35 @@ function newGeneration() {
     const car = new Car(spawnPoint.x, spawnPoint.y, eliteBrains[i].copiaCerebro());
     newPopulation.push(car);
   }
+  if (eliteBrains.length > 0) console.log(`  - Elites kept: ${newPopulation.length}`);
 
   // 2. Fill the rest with offspring
   while (newPopulation.length < POPULATION_SIZE) {
     let childBrain;
-    if (eliteBrains.length >= 2) {
-      // Tournament Selection
-      const parentA = selecionarParente(eliteBrains);
-      const parentB = selecionarParente(eliteBrains);
+    try {
+      if (eliteBrains.length >= 2) {
+        // Tournament Selection
+        const parentA = selecionarParente(eliteBrains);
+        const parentB = selecionarParente(eliteBrains);
 
-      // Crossover + Mutation
-      childBrain = parentA.cruzar(parentB);
-      childBrain.mutar(MUTATION_RATE);
-    } else if (saved) {
-      childBrain = saved.copiaCerebro();
-      if (newPopulation.length > 0) childBrain.mutar(MUTATION_RATE);
-    } else {
-      childBrain = new Cerebro();
+        // Crossover + Mutation
+        childBrain = parentA.cruzar(parentB);
+        childBrain.mutar(MUTATION_RATE);
+      } else if (saved) {
+        childBrain = saved.copiaCerebro();
+        if (newPopulation.length > 0) childBrain.mutar(MUTATION_RATE);
+      } else {
+        childBrain = new Cerebro();
+      }
+      newPopulation.push(new Car(spawnPoint.x, spawnPoint.y, childBrain));
+    } catch (e) {
+      console.error("❌ Error creating car brain, falling back to random:", e);
+      newPopulation.push(new Car(spawnPoint.x, spawnPoint.y, new Cerebro()));
     }
-
-    newPopulation.push(new Car(spawnPoint.x, spawnPoint.y, childBrain));
   }
 
   population = newPopulation;
+  console.log(`  - Total population: ${population.length}`);
 }
 
 /**

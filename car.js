@@ -67,7 +67,6 @@ class Car {
     // Neural network decision
     // Inputs: 9 sensors + current linear speed + current angular velocity (rotation delta)
     const normalizedSpeed = map(this.vel.mag(), 0, 5, 0, 1);
-    const normalizedRot = map(rot || 0, -1, 1, 0, 1); // use previous rotation as state
 
     // We'll store the last rotation output to feed it back as state
     this.lastRot = this.lastRot || 0;

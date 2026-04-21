@@ -126,11 +126,16 @@ class Cerebro {
    * @param {{ shapes: number[][], values: number[][] }} data
    */
   importarPesos(data) {
-    const tensors = data.values.map((vals, i) =>
-      tf.tensor(vals, data.shapes[i])
-    );
-    this.model.setWeights(tensors);
-    tensors.forEach(t => t.dispose());
+    try {
+      const tensors = data.values.map((vals, i) =>
+        tf.tensor(vals, data.shapes[i])
+      );
+      this.model.setWeights(tensors);
+      tensors.forEach(t => t.dispose());
+    } catch (e) {
+      console.warn("⚠️ Failed to import weights. Likely architecture mismatch.", e);
+      throw e; // re-throw to be handled by caller
+    }
   }
 
   /**
@@ -149,9 +154,15 @@ class Cerebro {
   static carregarDeLocalStorage(key = 'bestBrain') {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
-    const brain = new Cerebro();
-    brain.importarPesos(JSON.parse(raw));
-    return brain;
+    try {
+      const brain = new Cerebro();
+      brain.importarPesos(JSON.parse(raw));
+      return brain;
+    } catch (e) {
+      console.warn("⚠️ Clearing incompatible brain from LocalStorage.");
+      // localStorage.removeItem(key); // optional: clear it
+      return null;
+    }
   }
 }
 
